@@ -1,0 +1,24 @@
+{
+ "name": "Le carnet de route d'Ansuz",
+ "short_name": "Carnet d'Ansuz",
+ "start_url": "/",
+ "scope": "/",
+ "display": "standalone",
+ "background_color": "#12284a",
+ "theme_color": "#12284a",
+ "lang": "fr",
+ "description": "Le tour de France de l'architecture d'Ansuz : un département par jour, avec les visites à faire.",
+ "icons": [
+  {
+   "src": "/img/icone-192.png",
+   "sizes": "192x192",
+   "type": "image/png"
+  },
+  {
+   "src": "/img/icone-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "any maskable"
+  }
+ ]
+}
