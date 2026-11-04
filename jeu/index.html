@@ -360,7 +360,7 @@ const TYPES = {carte:{nom:"Photo mystère", court:"Photo", ico:"📍"}, quiz:{no
 /* La dernière étape publiée = la vidéo du jour : sa carte postale se gagne à l'épreuve finale */
 const DU_JOUR = ETAPES.find(e => e.date === CLE_JOUR) || ETAPES[ETAPES.length - 1];
 const NB_EPREUVES = 10, MAX = NB_EPREUVES * 1000, DORE = 7500;   // timbre doré à partir de 7 500 points
-const ANCIENNES = 37;   // étapes sorties avant le jeu : leur doré se tente une fois, en rattrapage
+const ANCIENNES = 36;   // étapes sans vidéo 3D : 5 manches en rattrapage, doré en une chance ; dès l'Indre (37) : 10 manches
 const doreEnRattrapage = e => e.etape <= ANCIENNES && !(S.essais && S.essais[e.code]);
 const defiDuJour = () => partieDe(DU_JOUR, Number(CLE_JOUR.replace(/-/g, "")) * 7919, true);
 const nbManches = e => e.etape <= ANCIENNES ? 5 : NB_EPREUVES;   // rattrapage : 5 manches pour les étapes d'avant le jeu
