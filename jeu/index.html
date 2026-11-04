@@ -298,6 +298,8 @@ h1,h2,h3{font-family:var(--f-titre);margin:0;line-height:1}
 .tb.ok i small{display:none} .tb.grand.ok i small{display:block}
 .tb.grand.ok i span{font-size:14px;margin-bottom:8px}
 .tb.dore i span::after{content:" ★"}
+.code-secret{font:800 22px var(--f-titre);letter-spacing:.12em;color:var(--cuivre-clair)} .code-secret.grand{display:block;text-align:center;font-size:44px;padding:12px;border:2px dashed var(--cuivre);border-radius:14px}
+.feuille input{width:100%;padding:12px;border-radius:12px;border:1px solid var(--ligne);background:var(--fond);color:var(--encre);font:700 17px var(--f-texte)}
 .tb.avant i{border-style:dotted;opacity:.6}
 .timbre-jour{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:center}
 .tb.grand i{width:96px;height:96px;font-size:22px} .tb.grand{font-size:12px}
@@ -423,8 +425,9 @@ function accueil(){
       <button class="tuile" id="carnet"><b>Mon carnet</b><span>La carte du tour et ce qu'on a appris</span></button>
       <button class="tuile" id="libre"><b>Rattrape les étapes</b><span>${ETAPES.filter(e => e !== DU_JOUR && !S.timbres[e.code]).length} timbres des étapes passées à gagner</span></button>
     </div>
-    <button class="btn sec" id="profilLien">🧭 ${S.profil ? `Explorateur : ${esc(S.profil.pseudo)} · changer` : "Choisis ton nom d'explorateur"}</button>
+    <button class="btn sec" id="profilLien">🧭 ${S.compte ? `Explorateur : ${esc(S.compte.pseudo)} · mon code` : "Choisis ton nom d'explorateur"}</button>
     <a class="btn sec" href="https://ansuz-explorer.github.io/" target="_blank" rel="noopener">🗺️ Accéder au carnet de route ↗</a>
+    <p class="petit" style="text-align:center" id="nbJoueurs">${statsTexte()}</p>
     <p class="petit" style="text-align:center">Une nouvelle étape chaque jour sur @ansuz.explorer</p>`;
   if (fait) $("#revoir").onclick = () => finJour(); else $("#jouer").onclick = () => partie(defi, "jour");
   $("#classes").onclick = () => { RETOUR = accueil; vueClassement("jour"); };
@@ -769,7 +772,7 @@ function fin(){
       res:P.res.map(r => ({t:r.type, p:r.pts, titre:r.titre, s:r.s, e:r.e}))};
     S.record = Math.max(S.record, P.score); sauver(); envoyer();
     finJour(gagnee);
-    if (!S.profil && !S.profilPlusTard) profil(true);
+    if (!S.compte && !S.profilPlusTard && !DBX) profil(true);
     return;
   }
   const bons = P.res.filter(r => r.pts > 0).length, c = P.etape.code, e = P.etape;
@@ -903,6 +906,7 @@ const OBJECTIFS = [
   {txt:"Aucune épreuve à 0 point", ok:j => j.res.every(r => r.p > 0)},
   {txt:"Le zoom trouvé en moins de 5 s", ok:j => j.res.some(r => r.t === "zoom" && r.p > 0 && r.s < 5)},
 ];
+const statsTexte = () => STATS && STATS.joueurs ? `${STATS.joueurs.toLocaleString("fr-FR")} explorateur${STATS.joueurs > 1 ? "s" : ""} sur la route · ${STATS.aujourdhui} aujourd'hui` : "";
 const objectifsDuJour = () => melange(hasard(Number(CLE_JOUR.replace(/-/g, "")) * 31), OBJECTIFS).slice(0, 3);
 
 /* Profil : un nom d'explorateur et (si on veut) son département, pour les classements */
@@ -911,31 +915,120 @@ const MOTS = ["Goéland", "Menhir", "Gargouille", "Vitrail", "Donjon", "Phare", 
 const nomDep = c => (DEP[c] || {}).nom || "";
 const pseudoAuHasard = c => { c = c || pioche(Math.random, ETAPES).code; return pioche(Math.random, MOTS) + " " + de({code:c, nom:nomDep(c)}); };
 function profil(depuisFin){
-  let ps = S.profil ? S.profil.pseudo : pseudoAuHasard(S.profil && S.profil.dep);
   const v = document.createElement("div"); v.className = "voile";
-  v.innerHTML = `<div class="feuille sombre" role="dialog" aria-label="Ton profil"><span class="maj">Ton profil</span><h3 class="gros">Qui es-tu, et d'où ?</h3>
-    <label class="maj" for="ps">Ton nom au classement</label>
-    <div class="champ"><input id="ps" maxlength="40" value="${esc(ps)}"><button id="hasard" aria-label="Un autre nom au hasard">🎲</button></div>
-    <label class="maj" for="dp">Ton département <span class="petit" style="text-transform:none;letter-spacing:0">facultatif</span></label>
-    <select id="dp"><option value="">Je ne précise pas</option>${D.carte.map(d => `<option value="${d.code}" ${S.profil && S.profil.dep === d.code ? "selected" : ""}>${d.code} · ${esc(d.nom)}</option>`).join("")}</select>
-    <p class="petit" style="margin:0">Ton score compte aussi pour ton département dans le classement des départements. Tu peux tout changer quand tu veux.</p>
-    <button class="btn" id="go">C'est parti</button><button class="lien" id="tard" style="align-self:center">Plus tard</button></div>`;
-  document.body.appendChild(v);
-  const ip = v.querySelector("#ps"), dp = v.querySelector("#dp");
-  v.querySelector("#hasard").onclick = () => { ps = pseudoAuHasard(dp.value); ip.value = ps; };
-  dp.onchange = () => { if (ip.value === ps) { ps = pseudoAuHasard(dp.value); ip.value = ps; } };
-  v.querySelector("#go").onclick = () => {
-    S.profil = {pseudo: ip.value.trim().slice(0, 40) || pseudoAuHasard(dp.value), dep: dp.value}; sauver(); v.remove(); envoyer();
-    if (depuisFin) finJour(); else accueil();
+  const fini = () => { v.remove(); if (depuisFin) finJour(); else accueil(); };
+  const choixDep = sel => `<select id="dp"><option value="">Je ne précise pas</option>${D.carte.map(d => `<option value="${d.code}" ${sel === d.code ? "selected" : ""}>${d.code} · ${esc(d.nom)}</option>`).join("")}</select>`;
+  const ecran = html => { v.innerHTML = `<div class="feuille sombre" role="dialog" aria-label="Ton passeport">${html}</div>`; };
+  const erreur = t => { const e = v.querySelector("#err"); if (e) e.textContent = t; };
+  // déjà un compte : on montre le code et on peut changer de département
+  if (S.compte) {
+    ecran(`<span class="maj">Ton passeport</span><h3 class="gros">${esc(S.compte.pseudo)}</h3>
+      <p style="margin:0">Ton code secret : <b class="code-secret">${esc(S.compte.code)}</b></p>
+      <p class="petit" style="margin:0">Garde-le (capture d'écran !) : avec ton pseudo, il te permet de retrouver ton passeport sur un autre téléphone.</p>
+      <label class="maj" for="dp">Ton département</label>${choixDep(S.profil && S.profil.dep)}
+      <button class="btn" id="go">Enregistrer</button><button class="lien" id="tard" style="align-self:center">Fermer</button>`);
+    document.body.appendChild(v);
+    v.querySelector("#go").onclick = () => { S.profil.dep = v.querySelector("#dp").value; sauver(); envoyer(); fini(); };
+    v.querySelector("#tard").onclick = () => v.remove();
+    return;
+  }
+  const nouveau = () => {
+    let ps = pseudoAuHasard();
+    ecran(`<span class="maj">Ton passeport</span><h3 class="gros">Choisis ton nom d'explorateur</h3>
+      <div class="champ"><input id="ps" maxlength="30" value="${esc(ps)}" aria-label="Ton pseudo"><button id="hasard" aria-label="Un autre nom au hasard">🎲</button></div>
+      <label class="maj" for="dp">Ton département <span class="petit" style="text-transform:none;letter-spacing:0">facultatif</span></label>${choixDep("")}
+      <p class="petit" style="margin:0">Tu vas recevoir un code secret : avec ton pseudo, il garde ton passeport et tes timbres, même si tu changes de téléphone.</p>
+      <p class="petit" id="err" style="margin:0;color:var(--ko)"></p>
+      <button class="btn" id="go">Créer mon passeport</button>
+      <button class="btn sec" id="deja">J'ai déjà un passeport</button><button class="lien" id="tard" style="align-self:center">Plus tard</button>`);
+    const ip = v.querySelector("#ps"), dp = v.querySelector("#dp");
+    v.querySelector("#hasard").onclick = () => { ps = pseudoAuHasard(dp.value); ip.value = ps; };
+    dp.onchange = () => { if (ip.value === ps) { ps = pseudoAuHasard(dp.value); ip.value = ps; } };
+    v.querySelector("#deja").onclick = retrouver;
+    v.querySelector("#tard").onclick = () => { S.profilPlusTard = true; sauver(); v.remove(); };
+    v.querySelector("#go").onclick = async () => {
+      const pseudo = ip.value.trim().slice(0, 30), dep = dp.value;
+      if (pseudo.length < 2) return erreur("Ton nom doit faire au moins 2 lettres.");
+      const b = v.querySelector("#go"); b.disabled = true; b.textContent = "Création…";
+      try {
+        const code = await rpc("creer_joueur", {p_pseudo: pseudo, p_dep: dep || null});
+        S.compte = {pseudo, code}; S.profil = {pseudo, dep}; sauver(); envoyer();
+        ecran(`<span class="maj">Ton passeport est prêt !</span><h3 class="gros">${esc(pseudo)}</h3>
+          <p style="margin:0">Ton code secret :</p><b class="code-secret grand">${esc(code)}</b>
+          <p class="petit" style="margin:0"><b>Fais une capture d'écran !</b> Avec ton pseudo et ce code, tu retrouves ton passeport sur n'importe quel téléphone. Tu le revois aussi dans « Mon passeport ».</p>
+          <button class="btn" id="ok">C'est noté</button>`);
+        v.querySelector("#ok").onclick = fini;
+      } catch (e) {
+        b.disabled = false; b.textContent = "Créer mon passeport";
+        if (/pris/.test(e.message)) return erreur("Ce nom est déjà pris. Choisis-en un autre (ou « J'ai déjà un passeport »).");
+        // pas de réseau : on garde un profil sur ce téléphone seulement
+        S.profil = {pseudo, dep}; sauver(); erreur("Pas de connexion : ton nom est gardé sur ce téléphone. Réessaie plus tard pour avoir ton code."); setTimeout(fini, 1800);
+      }
+    };
   };
-  v.querySelector("#tard").onclick = () => { S.profilPlusTard = true; sauver(); v.remove(); };
+  const retrouver = () => {
+    ecran(`<span class="maj">Retrouver mon passeport</span><h3 class="gros">Ton pseudo et ton code</h3>
+      <input id="ps" maxlength="30" placeholder="Ton pseudo" aria-label="Ton pseudo" autocomplete="username">
+      <input id="cd" maxlength="7" placeholder="Code (ex. K7M-4QX)" aria-label="Ton code secret" autocomplete="off" style="text-transform:uppercase;letter-spacing:.12em">
+      <p class="petit" id="err" style="margin:0;color:var(--ko)"></p>
+      <button class="btn" id="go">Retrouver mon passeport</button><button class="lien" id="retour" style="align-self:center">‹ Créer un nouveau passeport</button>`);
+    v.querySelector("#retour").onclick = nouveau;
+    v.querySelector("#go").onclick = async () => {
+      const pseudo = v.querySelector("#ps").value.trim(), code = v.querySelector("#cd").value.trim().toUpperCase();
+      const b = v.querySelector("#go"); b.disabled = true; b.textContent = "Recherche…";
+      try {
+        const r = await rpc("connexion", {p_pseudo: pseudo, p_code: code});
+        fusionner(r.etat || {});
+        S.compte = {pseudo: r.pseudo, code: code.replace(/^(...)-?(...)$/, "$1-$2")}; S.profil = {pseudo: r.pseudo, dep: r.dep || ""};
+        sauver(); envoyer(); fini(); toast("Passeport retrouvé !");
+      } catch (e) {
+        b.disabled = false; b.textContent = "Retrouver mon passeport";
+        erreur(/incorrect/.test(e.message) ? "Pseudo ou code incorrect." : "Pas de connexion. Réessaie dans un instant.");
+      }
+    };
+  };
+  document.body.appendChild(v);
+  nouveau();
+}
+/* Retrouver son passeport : on garde le meilleur des deux téléphones */
+function fusionner(e){
+  ["tampons", "timbres", "dores", "essais"].forEach(k => { S[k] = Object.assign({}, e[k] || {}, S[k] || {}); });
+  S.jours = Object.assign({}, e.jours || {}, S.jours || {});
+  S.record = Math.max(S.record || 0, e.record || 0);
+  if (e.debut && (!S.debut || e.debut < S.debut)) S.debut = e.debut;
+}
+
+/* Comptes et classement commun (Supabase) : le jeu ne passe que par des fonctions, les tables sont fermées */
+const SB = {url: "https://jbrmtxkkzvdakoomcbad.supabase.co", cle: "sb_publishable_zr9ORyh5mC8GTp_hp7k7XA_2CDaVnfx"};
+async function rpc(nom, args){
+  const r = await fetch(`${SB.url}/rest/v1/rpc/${nom}`, {method: "POST", headers: {apikey: SB.cle, "Content-Type": "application/json"}, body: JSON.stringify(args || {})});
+  const t = await r.json().catch(() => null);
+  if (!r.ok) throw new Error((t && t.message) || "erreur " + r.status);
+  return t;
+}
+let SB_OK = false, STATS = null;
+async function chargerClassement(){
+  const d = new Date(auj); d.setDate(d.getDate() - 6);
+  try {
+    const [jour, sem] = await Promise.all([rpc("classement", {p_debut: CLE_JOUR, p_fin: CLE_JOUR}), rpc("classement", {p_debut: jourCle(d), p_fin: CLE_JOUR})]);
+    const par = {};
+    sem.forEach(x => { par[x.pseudo.toLowerCase()] = {id: x.pseudo.toLowerCase(), pseudo: x.pseudo, dep: x.dep || "", jours: {}, semaineSB: Number(x.score), cartes: x.timbres}; });
+    jour.forEach(x => { const k = x.pseudo.toLowerCase(); (par[k] = par[k] || {id: k, pseudo: x.pseudo, dep: x.dep || "", jours: {}, cartes: x.timbres}).jours[CLE_JOUR] = {score: Number(x.score), carres: ""}; });
+    JOUEURS = Object.values(par); SB_OK = true;
+    if (S.compte) UID = S.compte.pseudo.toLowerCase();
+  } catch (e) { JOUEURS = JOUEURS || []; }
+  if (RAFRAICHIR) RAFRAICHIR();
 }
 
 /* Classement partagé : chaque joueur écrit son propre document joueurs/<son id> (capacité db) */
 let DBX = null, UID = null, JOUEURS = null, RAFRAICHIR = null, RETOUR = null, ECRITURE_KO = false;
 (async () => {
   try {
-    if (!window.claude || !window.claude.use) return;
+    if (!window.claude || !window.claude.use) {   // sur le site public : Supabase
+      chargerClassement(); if (S.compte) envoyer();
+      rpc("stats").then(x => { STATS = x; const n = $("#nbJoueurs"); if (n) n.textContent = statsTexte(); }).catch(() => {});
+      return;
+    }
     const [db, user] = await Promise.all([window.claude.use("db"), window.claude.use("user")]);
     if (!db || !user) return;
     EST_PROPRIO = !!(user.isOwner && await user.isOwner());
@@ -950,6 +1043,12 @@ let DBX = null, UID = null, JOUEURS = null, RAFRAICHIR = null, RETOUR = null, EC
 })();
 let ENVOI = Promise.resolve();
 function envoyer(){
+  if (S.compte && !DBX) {   // Supabase : tout le passeport + le score du jour (la première partie compte)
+    const {compte, ...etat} = S, j = S.jours[CLE_JOUR];
+    ENVOI = ENVOI.then(() => rpc("sauver", {p_pseudo: compte.pseudo, p_code: compte.code, p_etat: etat,
+      p_jour: j ? CLE_JOUR : null, p_score: j ? j.score : null, p_dep: (S.profil && S.profil.dep) || null})).then(() => chargerClassement()).catch(() => {});
+    return;
+  }
   if (!DBX || !UID || !S.profil || ECRITURE_KO) return;
   const jours = {};
   Object.keys(S.jours).sort().slice(-14).forEach(k => { jours[k] = {score:S.jours[k].score, carres:carres(S.jours[k])}; });
@@ -958,11 +1057,11 @@ function envoyer(){
 }
 function joueurs(){
   const l = (JOUEURS || []).filter(j => j.id !== UID && j.pseudo).map(j => ({...j, moi:false}));
-  if (S.profil) l.push({pseudo:S.profil.pseudo, dep:S.profil.dep, cartes:Object.keys(S.tampons).length, moi:true,
+  if (S.profil) l.push({pseudo:S.profil.pseudo, dep:S.profil.dep, cartes:Object.keys(S.timbres).length, moi:true,
     jours:Object.fromEntries(Object.entries(S.jours).map(([k, j]) => [k, {score:j.score, carres:carres(j)}]))});
   return l;
 }
-function semaine(j){ let t = 0; const d = new Date(auj); for (let i = 0; i < 7; i++) { const x = j.jours && j.jours[jourCle(d)]; if (x) t += x.score || 0; d.setDate(d.getDate() - 1); } return t; }
+function semaine(j){ if (j.semaineSB != null && !j.moi) return j.semaineSB; let t = 0; const d = new Date(auj); for (let i = 0; i < 7; i++) { const x = j.jours && j.jours[jourCle(d)]; if (x) t += x.score || 0; d.setDate(d.getDate() - 1); } return t; }
 function classement(onglet){
   const l = joueurs();
   if (onglet === "jour") return l.filter(j => j.jours && j.jours[CLE_JOUR]).map(j => ({...j, val:j.jours[CLE_JOUR].score, sous:j.jours[CLE_JOUR].carres}))
@@ -976,12 +1075,12 @@ function classement(onglet){
 }
 function vueClassement(onglet){
   stopChrono();
-  const ONG = [["jour", "Jour"], ["semaine", "Semaine"], ["deps", "Départements"], ["cartes", "Cartes postales"]];
+  const ONG = [["jour", "Jour"], ["semaine", "Semaine"], ["deps", "Départements"], ["cartes", "Timbres"]];
   const rendu = () => {
     const l = classement(onglet);
     const ligne = (j, i) => {
       if (j.ansuz) return `<li><em>${i + 1}</em><i style="background:url(${D.ansuz.tete}) center/cover"></i><span><b>Ansuz ✓</b><small>Le guide du tour</small></span><strong>${j.val.toLocaleString("fr-FR")}<small>${j.sous}</small></strong></li>`;
-      const sous = onglet === "deps" ? `${j.nb} joueur${j.nb > 1 ? "s" : ""} · moyenne de la semaine` : onglet === "cartes" ? "cartes postales" : nomDep(j.dep) || "Quelque part en France";
+      const sous = onglet === "deps" ? `${j.nb} joueur${j.nb > 1 ? "s" : ""} · moyenne de la semaine` : onglet === "cartes" ? "timbres au passeport" : nomDep(j.dep) || "Quelque part en France";
       const nom = onglet === "deps" ? j.pseudo : (j.moi ? "Toi · " : "") + j.pseudo;
       return `<li class="${j.moi ? "moi" : ""}"><em>${i + 1}</em><i>${esc(onglet === "deps" ? j.dep : (j.pseudo || "?").charAt(0))}</i>
         <span><b>${esc(nom)}</b><small>${esc(sous)}</small></span><strong>${j.val.toLocaleString("fr-FR")}${onglet === "jour" ? `<small>${j.sous}</small>` : ""}</strong></li>`;
@@ -990,8 +1089,8 @@ function vueClassement(onglet){
         <div class="mid"><b>Classements</b><div class="petit">${dateLongue} · ${((n) => n + " joueur" + (n > 1 ? "s" : "") + " classé" + (n > 1 ? "s" : ""))(classement("jour").length - 1)}</div></div></div>
       <div class="onglets">${ONG.map(([k, t]) => `<button data-o="${k}" class="${k === onglet ? "on" : ""}">${t}</button>`).join("")}</div>
       ${onglet === "deps" ? dit("Quel département connaît le mieux le tour de France ? Ton score compte pour le tien !") : ""}
-      ${!S.profil ? `<button class="btn sec" id="entrer">Choisis ton nom pour entrer au classement</button>` : ""}
-      ${!DBX ? `<p class="petit" style="margin:0">Le classement partagé n'est pas disponible ici : tu ne vois que ton propre score.</p>`
+      ${!S.compte && !DBX ? `<button class="btn sec" id="entrer">Crée ton passeport pour entrer au classement</button>` : ""}
+      ${!DBX && !SB_OK ? `<p class="petit" style="margin:0">Le classement commun n'a pas pu se charger : tu ne vois que ton propre score.</p>`
         : JOUEURS === null ? `<p class="petit" style="margin:0">Chargement du classement…</p>` : ""}
       <ol class="classe">${l.length ? l.map(ligne).join("") : `<li class="vide">Personne pour l'instant… À toi d'ouvrir la route !</li>`}</ol>`;
     $("#fermer").onclick = () => (RETOUR || accueil)();
@@ -1000,6 +1099,7 @@ function vueClassement(onglet){
     RAFRAICHIR = rendu;
   };
   rendu();
+  if (!DBX) chargerClassement();
 }
 
 /* L'écran d'arrivée du défi du jour */
@@ -1065,7 +1165,7 @@ function finJour(gagnee){
       : `<div class="rang"><b>${i + 1}<sup>${i ? "e" : "er"}</sup></b><span>sur <b>${n}</b> joueur${n > 1 ? "s" : ""}${i > 0
           ? `<br><b>${(l[i - 1].val - l[i].val).toLocaleString("fr-FR")} pts</b> derrière ${esc(l[i - 1].pseudo)}` : n > 1 ? "<br>Tu es en tête !" : ""}</span></div>
          <div class="jauge"><i style="width:${n > 1 ? Math.round(100 * (n - 1 - i) / (n - 1)) : 100}%"></i></div>
-         ${!DBX ? `<p class="petit" style="margin:0">Classement partagé indisponible ici : tu ne vois que ton score.</p>` : ""}
+         ${!DBX && !SB_OK ? `<p class="petit" style="margin:0">Classement commun indisponible pour l'instant : tu ne vois que ton score.</p>` : ""}
          <button class="btn sec" id="voir">Voir le classement ›</button>`);
     const en = $("#entrer"); if (en) en.onclick = () => profil(true);
     const vo = $("#voir"); if (vo) vo.onclick = () => { RETOUR = () => finJour(); vueClassement("jour"); };
