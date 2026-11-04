@@ -437,9 +437,14 @@ function accueil(){
   $("#carnet").onclick = () => carnet(); $("#libre").onclick = () => carnet(true); $("#postales").onclick = postales; $("#passeport").onclick = passeport;
 }
 
-/* Le score d'Ansuz du jour : son « record » à battre, entre 9 000 et 9 800 */
-const SCORE_ANSUZ = 9000 + Math.round(hasard(Number(CLE_JOUR.replace(/-/g, "")) * 97)() * 80) * 10;
-const RES_ANSUZ = (() => { const r = hasard(Number(CLE_JOUR.replace(/-/g, "")) * 13); return Array.from({length:NB_EPREUVES}, () => ({p: r() < .12 ? 650 : 900})); })();
+/* Le score d'Ansuz du jour : son record à battre, très haut (entre 9 700 et 9 900) pour donner envie de le chercher */
+const scoreAnsuz = cle => 9700 + Math.round(hasard(Number(cle.replace(/-/g, "")) * 97)() * 20) * 10;
+const SCORE_ANSUZ = scoreAnsuz(CLE_JOUR);
+const RES_ANSUZ = (() => { const r = hasard(Number(CLE_JOUR.replace(/-/g, "")) * 13), base = SCORE_ANSUZ / NB_EPREUVES;
+  const l = Array(NB_EPREUVES).fill(base);   // des manches un peu inégales, mais la somme reste son score
+  for (let i = 0; i < NB_EPREUVES / 2; i++) { const d = Math.round(r() * Math.min(1000 - base, 40)); l[i] += d; l[NB_EPREUVES - 1 - i] -= d; }
+  return l.map(p => ({p: Math.round(p)})); })();
+const semaineAnsuz = () => { let t = 0; const d = new Date(auj); for (let i = 0; i < 7; i++) { t += scoreAnsuz(jourCle(d)); d.setDate(d.getDate() - 1); } return t; };
 let EST_PROPRIO = false;
 
 /* Cartes postales : une par département réussi (quiz de l'étape, ou récompense du défi du jour) */
@@ -1066,8 +1071,9 @@ function classement(onglet){
   const l = joueurs();
   if (onglet === "jour") return l.filter(j => j.jours && j.jours[CLE_JOUR]).map(j => ({...j, val:j.jours[CLE_JOUR].score, sous:j.jours[CLE_JOUR].carres}))
     .concat([{pseudo:"Ansuz ✓", dep:"", ansuz:true, val:SCORE_ANSUZ, sous:carres({res:RES_ANSUZ})}]).sort((a, b) => b.val - a.val);
-  if (onglet === "semaine") return l.map(j => ({...j, val:semaine(j)})).filter(j => j.val > 0).sort((a, b) => b.val - a.val);
-  if (onglet === "cartes") return l.map(j => ({...j, val:j.cartes || 0})).filter(j => j.val > 0).sort((a, b) => b.val - a.val);
+  const ansuz = (val, sous) => ({pseudo:"Ansuz ✓", dep:"", ansuz:true, val, sous});
+  if (onglet === "semaine") return l.map(j => ({...j, val:semaine(j)})).filter(j => j.val > 0).concat([ansuz(semaineAnsuz(), "7 jours sur 7")]).sort((a, b) => b.val - a.val);
+  if (onglet === "cartes") return l.map(j => ({...j, val:j.cartes || 0})).filter(j => j.val > 0).concat([ansuz(ETAPES.length, "tous dorés")]).sort((a, b) => b.val - a.val);
   const g = {};
   l.forEach(j => { const v = semaine(j); if (j.dep && v) (g[j.dep] = g[j.dep] || []).push(v); });
   return Object.entries(g).map(([c, v]) => ({pseudo:nomDep(c), dep:c, nb:v.length, val:Math.round(v.reduce((a, b) => a + b) / v.length),
