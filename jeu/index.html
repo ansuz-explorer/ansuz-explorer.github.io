@@ -437,8 +437,8 @@ function accueil(){
   $("#carnet").onclick = () => carnet(); $("#libre").onclick = () => carnet(true); $("#postales").onclick = postales; $("#passeport").onclick = passeport;
 }
 
-/* Le score d'Ansuz du jour : son record à battre, très haut (entre 9 300 et 9 600 ; le joueur parfait fait 10 000) */
-const scoreAnsuz = cle => 9300 + Math.round(hasard(Number(cle.replace(/-/g, "")) * 97)() * 30) * 10;
+/* Le score d'Ansuz du jour : son record à battre, très haut (entre 9 000 et 9 500 ; le joueur parfait fait 10 000) */
+const scoreAnsuz = cle => 9000 + Math.round(hasard(Number(cle.replace(/-/g, "")) * 97)() * 50) * 10;
 const SCORE_ANSUZ = scoreAnsuz(CLE_JOUR);
 const RES_ANSUZ = (() => { const r = hasard(Number(CLE_JOUR.replace(/-/g, "")) * 13), base = SCORE_ANSUZ / NB_EPREUVES;
   const l = Array(NB_EPREUVES).fill(base);   // des manches un peu inégales, mais la somme reste son score
