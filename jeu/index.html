@@ -362,16 +362,18 @@ const DU_JOUR = ETAPES.find(e => e.date === CLE_JOUR) || ETAPES[ETAPES.length - 
 const NB_EPREUVES = 10, MAX = NB_EPREUVES * 1000, DORE = 7500;   // timbre doré à partir de 7 500 points
 const ANCIENNES = 37;   // étapes sorties avant le jeu : leur doré se tente une fois, en rattrapage
 const doreEnRattrapage = e => e.etape <= ANCIENNES && !(S.essais && S.essais[e.code]);
-function defiDuJour(){
-  // les 10 manches parlent toutes de la vidéo du jour : ce que tu as vu, entendu, et où c'est
-  const r = hasard(Number(CLE_JOUR.replace(/-/g, "")) * 7919), J = DU_JOUR;
+const defiDuJour = () => partieDe(DU_JOUR, Number(CLE_JOUR.replace(/-/g, "")) * 7919, true);
+const nbManches = e => e.etape <= ANCIENNES ? 5 : NB_EPREUVES;   // rattrapage : 5 manches pour les étapes d'avant le jeu
+/* Une partie sur un seul département : ce qu'on a vu et entendu dans ses vidéos, et où c'est */
+function partieDe(J, graine, duJour){
+  const r = hasard(graine);
   const autres = melange(r, ETAPES.filter(e => e !== J));
   const qs = melange(r, J.q), Q = i => qs[i % qs.length];
   const quiz = (k, type = "quiz") => ({type, etape:J, ...k, choix: melange(r, [k.ok, ...k.ko])});
   const vf = k => { const vrai = r() < .5; return {type:"vf", etape:J, q:k.q, propose: vrai ? k.ok : pioche(r, k.ko), vrai, ok:k.ok, info:k.info}; };
   const ph = melange(r, J.photos);
   // « Quatre photos » : une seule vient de la vidéo du jour
-  const photos = {type:"photos", etape:J, duJour:true, choix: melange(r, [{etape:J, photo:ph[0]}, ...autres.slice(0, 3).map(y => ({etape:y, photo:pioche(r, y.photos)}))])};
+  const photos = {type:"photos", etape:J, duJour, choix: melange(r, [{etape:J, photo:ph[0]}, ...autres.slice(0, 3).map(y => ({etape:y, photo:pioche(r, y.photos)}))])};
   // le zoom : une photo de la vidéo, à reconnaître parmi des légendes
   const zp = ph[1 % ph.length], leurres = melange(r, autres.flatMap(y => y.photos.map(p => p.legende)).filter(l => l && l !== zp.legende)).slice(0, 2);
   const zoom = {type:"zoom", etape:J, photo:zp, bon:"L0", cx:.3 + r() * .4, cy:.3 + r() * .4,
@@ -387,6 +389,8 @@ function defiDuJour(){
   const mot = motTitre.length >= 4 && motTitre.length <= 10 ? motTitre : sansAccent(J.nom).slice(0, 12);
   const lettres = {type:"lettres", etape:J, mot, tirage: melange(r, [...mot])};
   const ch = D.chiffres.find(c => c.code === J.code);
+  const finale = quiz(Q(qs.length > 3 ? 3 : 2), duJour ? "jour" : "quiz");
+  if (!duJour && nbManches(J) === 5) return [{type:"carte", etape:J, photo:ph[0]}, quiz(Q(0)), photos, vf(Q(1)), finale];
   return [
     {type:"carte", etape:J, photo:ph[0]},
     quiz(Q(0)), photos, vf(Q(1)), zoom,
@@ -394,7 +398,7 @@ function defiDuJour(){
     voisin || vf(Q(2)),
     lettres,
     J.cache ? {type:"cache", etape:J, ...J.cache} : vf(Q(3)),
-    quiz(Q(qs.length > 3 ? 3 : 2), "jour"),
+    finale,
   ];
 }
 
@@ -813,7 +817,7 @@ function fin(){
     return;
   }
   const bons = P.res.filter(r => r.pts > 0).length, c = P.etape.code, e = P.etape;
-  const reussi = bons >= n - 1, duJour = c === DU_JOUR.code;   // l'étape du jour se joue sur l'accueil
+  const besoin = Math.ceil(n * .7), reussi = bons >= besoin, duJour = c === DU_JOUR.code;   // l'étape du jour se joue sur l'accueil
   if (reussi && !S.tampons[c]) { S.tampons[c] = true; gagnee = e; }
   let timbreMsg = "";
   if (!duJour) {
@@ -826,7 +830,7 @@ function fin(){
   sauver(); envoyer();
   const nbT = Object.keys(S.tampons).length;
   const msg = duJour ? "Le timbre d'aujourd'hui se gagne dans l'étape du jour, sur l'accueil !"
-    : [gagnee ? `Je t'envoie ma carte postale ${de(gagnee)} ! Ça t'en fait ${nbT} sur ${ETAPES.length}.` : !S.tampons[c] ? `${n - 1} bonnes réponses sur ${n} pour la carte postale : réessaie !` : "",
+    : [gagnee ? `Je t'envoie ma carte postale ${de(gagnee)} ! Ça t'en fait ${nbT} sur ${ETAPES.length}.` : !S.tampons[c] ? `${besoin} bonnes réponses sur ${n} pour la carte postale : réessaie !` : "",
        timbreMsg || (S.dores && S.dores[c] ? "Ton timbre est déjà doré. Bien joué !" : "Tu as déjà ce timbre.")].filter(Boolean).join(" ");
   app.innerHTML = `
     <div class="marque"><span class="rune">ᚨ</span></div>
@@ -1328,8 +1332,8 @@ function carnet(modeQuiz, ouvrir){
       <p class="cred" style="text-align:left;margin:0">${esc(ph.credit)}</p>
       <span class="maj">Ce qu'Ansuz a appris</span><ul>${e.appris.map(a => `<li>${esc(a)}</li>`).join("")}</ul>
       ${timbre(e, S.timbres[code], "grand")}
-      <button class="btn" id="qz">${code === DU_JOUR.code ? "Rejouer le quiz" : doreEnRattrapage(e) ? "Gagner le timbre · une chance pour le doré" : !S.timbres[code] ? "Gagner le timbre" : "Rejouer le quiz"} (${e.q.length} questions) →</button></div>`;
-    $("#qz").onclick = () => partie(melange(Math.random, e.q).map(x => ({type:"quiz", etape:e, ...x, choix: melange(Math.random, [x.ok, ...x.ko])})), "etape", e);
+      <button class="btn" id="qz">${code === DU_JOUR.code ? "Rejouer le quiz" : doreEnRattrapage(e) ? "Gagner le timbre · une chance pour le doré" : !S.timbres[code] ? "Gagner le timbre" : "Rejouer le quiz"} (${nbManches(e)} manches) →</button></div>`;
+    $("#qz").onclick = () => partie(partieDe(e, Math.floor(Math.random() * 1e9), false), "etape", e);
     $("#fiche").scrollIntoView({behavior:"smooth", block:"start"});
   };
   app.querySelectorAll(".carteFr path").forEach(p => p.onclick = () => ouvre(p.dataset.code));
