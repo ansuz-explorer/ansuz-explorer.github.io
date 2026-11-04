@@ -437,8 +437,8 @@ function accueil(){
   $("#carnet").onclick = () => carnet(); $("#libre").onclick = () => carnet(true); $("#postales").onclick = postales; $("#passeport").onclick = passeport;
 }
 
-/* Le score d'Ansuz du jour : son record à battre, très haut (entre 9 700 et 9 900) pour donner envie de le chercher */
-const scoreAnsuz = cle => 9700 + Math.round(hasard(Number(cle.replace(/-/g, "")) * 97)() * 20) * 10;
+/* Le score d'Ansuz du jour : son record à battre, très haut (entre 9 300 et 9 600 ; le joueur parfait fait 10 000) */
+const scoreAnsuz = cle => 9300 + Math.round(hasard(Number(cle.replace(/-/g, "")) * 97)() * 30) * 10;
 const SCORE_ANSUZ = scoreAnsuz(CLE_JOUR);
 const RES_ANSUZ = (() => { const r = hasard(Number(CLE_JOUR.replace(/-/g, "")) * 13), base = SCORE_ANSUZ / NB_EPREUVES;
   const l = Array(NB_EPREUVES).fill(base);   // des manches un peu inégales, mais la somme reste son score
@@ -520,6 +520,8 @@ function chrono(sec, fin){
     if (r <= 0) { stopChrono(); fin(); } else CH.raf = requestAnimationFrame(tick); };
   CH = {t0, sec, raf: requestAnimationFrame(tick)};
 }
+/* Points pleins si tu réponds dans le premier quart du temps : le joueur parfait fait 10 000 */
+const vite = (r, marge = .75) => Math.min(1, r / marge);
 function resteChrono(){ return CH ? Math.max(0, 1 - (performance.now() - CH.t0) / (CH.sec * 1000)) : 0; }
 function stopChrono(){ if (CH) cancelAnimationFrame(CH.raf); CH = null; RAFRAICHIR = null; }
 
@@ -551,13 +553,13 @@ function epQuiz(x){
     <div class="question"><div class="haut"><span class="maj">${esc(x.etape.nom)} · étape ${x.etape.etape}</span><b id="sec">20 s</b></div><h3>${esc(x.q)}</h3></div>
     <div class="chrono"><i id="chrono"></i></div>
     <div class="choix">${x.choix.map((c, i) => `<button data-c="${esc(c)}"><i>${L[i]}</i>${esc(c)}</button>`).join("")}</div>
-    <p class="aide">Plus tu réponds vite, plus ça rapporte : 500 à 1000 points.</p>`;
+    <p class="aide">Réponds vite : 1000 points dans les 5 premières secondes.</p>`;
   const repondre = btn => {
     const r = resteChrono(); stopChrono(); P.ext = {s: Math.round(200 * (1 - r)) / 10};
     const ok = btn && btn.dataset.c === x.ok;
     app.querySelectorAll(".choix button").forEach(b => { b.disabled = true; if (b.dataset.c === x.ok) b.classList.add("bon"); });
     if (btn && !ok) btn.classList.add("faux");
-    resultat(x, ok ? Math.round(500 + 500 * r) : 0, x.ok, [["Tu as dit", btn ? btn.dataset.c : "Temps écoulé"]], x.info, `Vu dans la vidéo de l'étape ${x.etape.etape} : ${x.etape.titre}`);
+    resultat(x, ok ? Math.round(500 + 500 * vite(r)) : 0, x.ok, [["Tu as dit", btn ? btn.dataset.c : "Temps écoulé"]], x.info, `Vu dans la vidéo de l'étape ${x.etape.etape} : ${x.etape.titre}`);
   };
   app.querySelectorAll(".choix button").forEach(b => b.onclick = () => repondre(b));
   chrono(20, () => repondre(null));
@@ -576,7 +578,7 @@ function epVF(x){
     const ok = btn && (btn.dataset.v === "1") === x.vrai;
     app.querySelectorAll(".vf button").forEach(b => { b.disabled = true; if ((b.dataset.v === "1") === x.vrai) b.classList.add("bon"); });
     if (btn && !ok) btn.classList.add("faux");
-    resultat(x, ok ? Math.round(500 + 500 * r) : 0, x.vrai ? "C'était vrai !" : "C'était faux !", [["La bonne réponse", x.ok]], x.info, `Vu dans la vidéo de l'étape ${x.etape.etape} : ${x.etape.titre}`);
+    resultat(x, ok ? Math.round(500 + 500 * vite(r)) : 0, x.vrai ? "C'était vrai !" : "C'était faux !", [["La bonne réponse", x.ok]], x.info, `Vu dans la vidéo de l'étape ${x.etape.etape} : ${x.etape.titre}`);
   };
   app.querySelectorAll(".vf button").forEach(b => b.onclick = () => repondre(b));
   chrono(10, () => repondre(null));
@@ -623,7 +625,7 @@ function epZoom(x){
     const ok = btn && btn.dataset.c === x.etape.code;
     app.querySelectorAll(".choix button").forEach(b => { b.disabled = true; if (b.dataset.c === x.etape.code) b.classList.add("bon"); });
     if (btn && !ok) btn.classList.add("faux");
-    resultat(x, ok ? Math.round(300 + 700 * r) : 0, x.etape.titre, [["Département", x.etape.nom]],
+    resultat(x, ok ? Math.round(300 + 700 * vite(r)) : 0, x.etape.titre, [["Département", x.etape.nom]],
       pioche(Math.random, x.etape.appris), [x.photo.legende, x.photo.credit].filter(Boolean).join(" · "));
   };
   app.querySelectorAll(".choix button").forEach(b => b.onclick = () => repondre(b));
@@ -672,7 +674,7 @@ function epIndices(x){
     const ok = btn && btn.dataset.c === x.etape.code; P.ext = {s: Math.round(180 * (1 - r)) / 10};
     app.querySelectorAll(".choix button").forEach(b => { b.disabled = true; if (b.dataset.c === x.etape.code) b.classList.add("bon"); });
     if (btn && !ok) btn.classList.add("faux");
-    resultat(x, ok ? Math.round(400 + 600 * r) : 0, x.etape.nom, [["Tu as dit", btn ? nomDep(btn.dataset.c) : "Temps écoulé"]],
+    resultat(x, ok ? Math.round(400 + 600 * vite(r)) : 0, x.etape.nom, [["Tu as dit", btn ? nomDep(btn.dataset.c) : "Temps écoulé"]],
       `C'était mon étape ${x.etape.etape} : ${x.etape.titre}.`, `Vu dans la vidéo de l'étape ${x.etape.etape}`);
   };
   app.querySelectorAll(".choix button").forEach(b => b.onclick = () => repondre(b));
@@ -693,7 +695,7 @@ function epPhotos(x){
       if (b.dataset.c === x.etape.code) b.classList.add("bon"); });
     if (btn && !ok) btn.classList.add("faux");
     const bonne = x.choix.find(c => c.etape === x.etape);
-    resultat(x, ok ? Math.round(400 + 600 * r) : 0, bonne.photo.legende || x.etape.titre, [["Département", x.etape.nom]],
+    resultat(x, ok ? Math.round(400 + 600 * vite(r)) : 0, bonne.photo.legende || x.etape.titre, [["Département", x.etape.nom]],
       pioche(Math.random, x.etape.appris), [bonne.photo.legende, bonne.photo.credit].filter(Boolean).join(" · "));
   };
   app.querySelectorAll(".grille4 button").forEach(b => b.onclick = () => repondre(b));
@@ -713,7 +715,7 @@ function epBoussole(x){
     const ok = btn && btn.dataset.c === x.etape.code;
     app.querySelectorAll(".choix button").forEach(b => { b.disabled = true; if (b.dataset.c === x.etape.code) b.classList.add("bon"); });
     if (btn && !ok) btn.classList.add("faux");
-    resultat(x, ok ? Math.round(500 + 500 * r) : 0, `${x.etape.nom}, le plus ${x.sens.mot}`, [["Tu as dit", btn ? nomDep(btn.dataset.c) : "Temps écoulé"]],
+    resultat(x, ok ? Math.round(500 + 500 * vite(r)) : 0, `${x.etape.nom}, le plus ${x.sens.mot}`, [["Tu as dit", btn ? nomDep(btn.dataset.c) : "Temps écoulé"]],
       pioche(Math.random, x.etape.appris), `Étape ${x.etape.etape} : ${x.etape.titre}`);
   };
   app.querySelectorAll(".choix button").forEach(b => b.onclick = () => repondre(b));
@@ -734,7 +736,7 @@ function epLettres(x){
     const r = resteChrono(); stopChrono(); P.ext = {s: Math.round(250 * (1 - r)) / 10};
     app.querySelectorAll(".tuiles-l button").forEach(b => b.disabled = true);
     [...x.mot].forEach((l, i) => cases[i].textContent = l);
-    const pts = gagne ? Math.max(100, Math.round((400 + 600 * r) * (1 - .12 * err))) : 0;
+    const pts = gagne ? Math.max(100, Math.round((400 + 600 * vite(r, .5)) * (1 - .12 * err))) : 0;
     resultat(x, pts, x.etape.nom, [["Erreurs", String(err)]], pioche(Math.random, x.etape.appris), `Étape ${x.etape.etape} : ${x.etape.titre}`);
   };
   app.querySelectorAll(".tuiles-l button").forEach(b => b.onclick = () => {
