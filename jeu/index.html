@@ -958,7 +958,8 @@ function profil(depuisFin){
       if (pseudo.length < 2) return erreur("Ton nom doit faire au moins 2 lettres.");
       const b = v.querySelector("#go"); b.disabled = true; b.textContent = "Création…";
       try {
-        const code = await rpc("creer_joueur", {p_pseudo: pseudo, p_dep: dep || null});
+        const code = await rpc("creer_joueur", {p_pseudo: pseudo, p_dep: dep || null, p_src: S.src || null})
+          .catch(e => /PGRST202|Could not find/.test(e.message) ? rpc("creer_joueur", {p_pseudo: pseudo, p_dep: dep || null}) : Promise.reject(e));
         S.compte = {pseudo, code}; S.profil = {pseudo, dep}; sauver(); envoyer();
         ecran(`<span class="maj">Ton passeport est prêt !</span><h3 class="gros">${esc(pseudo)}</h3>
           <p style="margin:0">Ton code secret :</p><b class="code-secret grand">${esc(code)}</b>
@@ -1006,6 +1007,8 @@ function fusionner(e){
 }
 
 /* Comptes et classement commun (Supabase) : le jeu ne passe que par des fonctions, les tables sont fermées */
+const SRC = (new URLSearchParams(location.search).get("src") || "").toLowerCase().replace(/[^a-z]/g, "").slice(0, 10);
+if (SRC && !S.src) { S.src = SRC; sauver(); }   // le premier réseau qui a amené le joueur
 const SB = {url: "https://jbrmtxkkzvdakoomcbad.supabase.co", cle: "sb_publishable_zr9ORyh5mC8GTp_hp7k7XA_2CDaVnfx"};
 async function rpc(nom, args){
   const r = await fetch(`${SB.url}/rest/v1/rpc/${nom}`, {method: "POST", headers: {apikey: SB.cle, "Content-Type": "application/json"}, body: JSON.stringify(args || {})});
@@ -1033,6 +1036,8 @@ let DBX = null, UID = null, JOUEURS = null, RAFRAICHIR = null, RETOUR = null, EC
   try {
     if (!window.claude || !window.claude.use) {   // sur le site public : Supabase
       chargerClassement(); if (S.compte) envoyer();
+      // d'où vient le joueur (?src=ig / tt / yt dans le lien) : une visite comptée par téléphone et par jour
+      if (S.vu !== CLE_JOUR) rpc("visite", {p_src: SRC || "direct"}).then(() => { S.vu = CLE_JOUR; sauver(); }).catch(() => {});
       rpc("stats").then(x => { STATS = x; const n = $("#nbJoueurs"); if (n) n.textContent = statsTexte(); }).catch(() => {});
       return;
     }
