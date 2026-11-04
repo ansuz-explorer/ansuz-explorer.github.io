@@ -288,8 +288,16 @@ h1,h2,h3{font-family:var(--f-titre);margin:0;line-height:1}
 .tb.ok i::before{content:"";position:absolute;inset:4px;border-radius:50%;border:1.5px dashed currentColor}
 .tb.ok i small{display:block;font:700 7px var(--f-texte);letter-spacing:.05em}
 .tb.rate i{border:2px solid #E8A0A8;color:#D9707C;transform:rotate(-14deg)} .tb.rate i::after{content:"RATÉ";position:absolute;font:800 11px var(--f-texte);letter-spacing:.1em;background:#FBFAF7;padding:0 3px;transform:rotate(-8deg)}
-.tb.dore i{border-color:#C9971C;color:#A87A0E;background:radial-gradient(circle,rgba(246,196,52,.35),rgba(246,196,52,.08) 70%);box-shadow:0 0 0 3px rgba(246,196,52,.35)}
-.tb.dore i small::after{content:" ★"}
+.tb.ok i{overflow:hidden;color:#fff}
+.tb.ok i .ph{position:absolute;inset:0;border-radius:50%;background:center/cover;filter:sepia(.85) saturate(.75) brightness(.92)}
+.tb.ok i span{position:relative;z-index:1;align-self:end;margin-bottom:5px;padding:1px 6px;border-radius:7px;background:rgba(20,34,58,.78);font:800 11px/1.2 var(--f-titre)}
+.tb.ok i::before{z-index:1;border-color:rgba(255,255,255,.7)}
+.tb.dore i{border:4px solid #E3B12C;box-shadow:0 0 0 2px #FFF3C4,0 0 0 5px #C9971C,0 0 16px rgba(246,196,52,.75)}
+.tb.dore i .ph{filter:saturate(1.15)}
+.tb.dore i span{background:linear-gradient(90deg,#C9971C,#F6C434);color:#3A2A05}
+.tb.ok i small{display:none} .tb.grand.ok i small{display:block}
+.tb.grand.ok i span{font-size:14px;margin-bottom:8px}
+.tb.dore i span::after{content:" ★"}
 .tb.avant i{border-style:dotted;opacity:.6}
 .timbre-jour{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:center}
 .tb.grand i{width:96px;height:96px;font-size:22px} .tb.grand{font-size:12px}
@@ -784,7 +792,8 @@ function timbre(e, date, cls = ""){
   const ok = !!date, r = ((e.code.charCodeAt(0) * 7 + e.code.charCodeAt(1) * 13) % 20) - 10;
   const jour = date ? new Date(date + "T12:00").toLocaleDateString("fr-FR", {day:"numeric", month:"short"}) : "";
   const dore = ok && S.dores && S.dores[e.code];
-  return `<div class="tb ${ok ? "ok" : ""} ${dore ? "dore" : ""} ${cls}" style="--r:${r}deg"><i>${ok ? `<span>ᚨ ${e.code}<small>${esc(jour)}</small></span>` : esc(e.code)}</i>${esc(e.nom)}</div>`;
+  const ph = ok && e.photos && e.photos[0] ? `<b class="ph" style="background-image:url(${e.photos[0].img})"></b>` : "";
+  return `<div class="tb ${ok ? "ok" : ""} ${dore ? "dore" : ""} ${cls}" style="--r:${r}deg"><i>${ok ? `${ph}<span>${e.code}<small>${esc(jour)}</small></span>` : esc(e.code)}</i>${esc(e.nom)}</div>`;
 }
 function etatTimbre(c){
   const e = PAR_CODE[c];
@@ -822,13 +831,19 @@ async function partagerPasseport(){
   x.font = "700 60px Caveat, cursive"; x.fillStyle = "#E0A878"; x.fillText(`${n} timbre${n > 1 ? "s" : ""} sur ${D.carte.length}`, 540, 340);
   arrondi(x, 60, 400, 960, 1200, 30); x.fillStyle = "#FBFAF7"; x.fill();
   const tous = D.carte.slice().sort((a, b) => a.code.localeCompare(b.code));
+  const photos = {};
+  await Promise.all(Object.keys(S.timbres).filter(c => PAR_CODE[c]).map(async c => { photos[c] = await chargeImg(PAR_CODE[c].photos[0].img); }));
   const col = 12, cw = 960 / col, rh = 1200 / Math.ceil(tous.length / col);
   tous.forEach((d, i) => {
     const cx = 60 + cw * (i % col + .5), cy = 400 + rh * (Math.floor(i / col) + .5), st = etatTimbre(d.code);
     x.save(); x.translate(cx, cy);
     if (st === "ok") { x.rotate(-0.15); const or = S.dores && S.dores[d.code]; x.strokeStyle = or ? "#C9971C" : "#B87333";
-      if (or) { x.fillStyle = "rgba(246,196,52,.3)"; x.beginPath(); x.arc(0, 0, 34, 0, 7); x.fill(); } x.lineWidth = 5; x.beginPath(); x.arc(0, 0, 34, 0, 7); x.stroke();
-      x.fillStyle = or ? "#A87A0E" : "#B87333"; x.font = "800 24px 'Baloo 2', sans-serif"; x.fillText(d.code, 0, 9); }
+      const im = photos[d.code];
+      if (im) { x.save(); x.beginPath(); x.arc(0, 0, 34, 0, 7); x.clip(); if (!or) x.filter = "sepia(.85) saturate(.75)";
+        const k = Math.max(68 / im.width, 68 / im.height); x.drawImage(im, -im.width * k / 2, -im.height * k / 2, im.width * k, im.height * k); x.restore(); }
+      if (or) { x.shadowColor = "rgba(246,196,52,.9)"; x.shadowBlur = 14; } x.lineWidth = or ? 7 : 5; x.beginPath(); x.arc(0, 0, 34, 0, 7); x.stroke();
+      x.shadowBlur = 0; x.fillStyle = or ? "#C9971C" : "rgba(20,34,58,.8)"; arrondi(x, -22, 14, 44, 22, 8); x.fill();
+      x.fillStyle = or ? "#3A2A05" : "#fff"; x.font = "800 18px 'Baloo 2', sans-serif"; x.fillText(d.code, 0, 31); }
     else { x.strokeStyle = st === "rate" ? "#E8A0A8" : "#D5DCE6"; x.setLineDash([5, 5]); x.lineWidth = 2; x.beginPath(); x.arc(0, 0, 30, 0, 7); x.stroke();
       x.fillStyle = st === "rate" ? "#D9707C" : "#C9D1DC"; x.font = "700 18px Nunito, sans-serif"; x.fillText(d.code, 0, 7); }
     x.restore();
