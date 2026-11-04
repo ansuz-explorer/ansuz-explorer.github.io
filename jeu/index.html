@@ -287,7 +287,7 @@ h1,h2,h3{font-family:var(--f-titre);margin:0;line-height:1}
 .tb.ok i{border:3px solid var(--cuivre);color:var(--cuivre);transform:rotate(var(--r,-8deg));background:radial-gradient(circle,rgba(184,115,51,.12),transparent 70%)}
 .tb.ok i::before{content:"";position:absolute;inset:4px;border-radius:50%;border:1.5px dashed currentColor}
 .tb.ok i small{display:block;font:700 7px var(--f-texte);letter-spacing:.05em}
-.tb.rate i{border:2px solid #E8A0A8;color:#D9707C;transform:rotate(-14deg)} .tb.rate i::after{content:"RATÉ";position:absolute;font:800 11px var(--f-texte);letter-spacing:.1em;background:#FBFAF7;padding:0 3px;transform:rotate(-8deg)}
+.tb.rate i{border:2px solid #E8A0A8;color:#D9707C;transform:rotate(-14deg)} .tb.rate i::after{content:"À RATTRAPER";font-size:8px!important;position:absolute;font:800 11px var(--f-texte);letter-spacing:.1em;background:#FBFAF7;padding:0 3px;transform:rotate(-8deg)}
 .tb.ok i{overflow:hidden;color:#fff}
 .tb.ok i .ph{position:absolute;inset:0;border-radius:50%;background:center/cover;filter:sepia(.85) saturate(.75) brightness(.92)}
 .tb.ok i span{position:relative;z-index:1;align-self:end;margin-bottom:5px;padding:1px 6px;border-radius:7px;background:rgba(20,34,58,.78);font:800 11px/1.2 var(--f-titre)}
@@ -413,13 +413,13 @@ function accueil(){
     <div class="stats"><div><b>${S.record}</b><span>record</span></div><div><b>${nbT}/${ETAPES.length}</b><span>cartes postales</span></div><div><b>${serie()}</b><span>jours de suite</span></div></div>
     <div class="tuiles">
       <button class="tuile large" id="passeport"><span class="pile" style="display:grid;place-items:center"><span class="mini-pass">${Object.keys(S.timbres).length}</span></span>
-        <span><b style="display:block;color:var(--encre)">Mon passeport</b>${Object.keys(S.timbres).length} timbre${Object.keys(S.timbres).length > 1 ? "s" : ""} · un seul par jour, le jour de la vidéo</span></button>
+        <span><b style="display:block;color:var(--encre)">Mon passeport</b>${Object.keys(S.timbres).length} timbre${Object.keys(S.timbres).length > 1 ? "s" : ""} sur ${ETAPES.length} · les étapes passées se rattrapent</span></button>
       <button class="tuile large" id="postales"><span class="pile">${(mes.length ? mes : [null, null, null]).map(e => `<i style="${e ? `background-image:url(${e.photos[0].img})` : ""}"></i>`).join("")}</span>
         <span><b style="display:block;color:var(--encre)">Mes cartes postales</b>${nbT}/${ETAPES.length} · une par département réussi</span></button>
       <button class="tuile large" id="classes"><span class="pile" style="display:grid;place-items:center;font-size:34px">🏆</span>
         <span><b style="display:block;color:var(--encre)">Classements</b>Jour, semaine, et le département qui connaît le mieux la France</span></button>
       <button class="tuile" id="carnet"><b>Mon carnet</b><span>La carte du tour et ce qu'on a appris</span></button>
-      <button class="tuile" id="libre"><b>Quiz par étape</b><span>Réussis un département, gagne sa carte postale</span></button>
+      <button class="tuile" id="libre"><b>Rattrape les étapes</b><span>${ETAPES.filter(e => e !== DU_JOUR && !S.timbres[e.code]).length} timbres des étapes passées à gagner</span></button>
     </div>
     <button class="btn sec" id="profilLien">🧭 ${S.profil ? `Explorateur : ${esc(S.profil.pseudo)} · changer` : "Choisis ton nom d'explorateur"}</button>
     <a class="btn sec" href="https://ansuz-explorer.github.io/" target="_blank" rel="noopener">🗺️ Accéder au carnet de route ↗</a>
@@ -770,18 +770,27 @@ function fin(){
     if (!S.profil && !S.profilPlusTard) profil(true);
     return;
   }
-  const bons = P.res.filter(r => r.pts > 0).length;
-  if (bons >= n - 1 && !S.tampons[P.etape.code]) { S.tampons[P.etape.code] = true; gagnee = P.etape; sauver(); envoyer(); }
+  const bons = P.res.filter(r => r.pts > 0).length, c = P.etape.code;
+  const reussi = bons >= n - 1, duJour = c === DU_JOUR.code;   // le timbre du jour se gagne dans l'étape du jour
+  if (reussi && !S.tampons[c]) { S.tampons[c] = true; gagnee = P.etape; }
+  // rattrapage du timbre : un jour manqué depuis ta première partie reste un timbre simple
+  const manque = etatTimbre(c) === "rate";
+  let timbreMsg = "";
+  if (reussi && !duJour && !S.timbres[c]) { S.timbres[c] = CLE_JOUR; timbreMsg = ` Et le timbre ${de(P.etape)} entre dans ton passeport !`; }
+  if (reussi && !duJour && !manque && P.score >= max * .75 && !(S.dores && S.dores[c])) { (S.dores = S.dores || {})[c] = true; timbreMsg = ` Et en plus, son timbre est doré !`; }
+  if (reussi) { sauver(); envoyer(); }
   const nbT = Object.keys(S.tampons).length;
-  const msg = gagnee ? `Je t'envoie ma carte postale ${de(gagnee)} ! Ça t'en fait ${nbT} sur ${ETAPES.length}.`
-    : S.tampons[P.etape.code] ? "Tu as déjà ma carte postale d'ici. Bien joué quand même !" : `Presque ! Il faut ${n - 1} bonnes réponses sur ${n} pour gagner ma carte postale. Réessaie !`;
+  const msg = gagnee ? `Je t'envoie ma carte postale ${de(gagnee)} ! Ça t'en fait ${nbT} sur ${ETAPES.length}.${timbreMsg}`
+    : reussi ? (timbreMsg ? timbreMsg.trim() : duJour && !S.timbres[c] ? "Le timbre d'aujourd'hui se gagne dans l'étape du jour, sur l'accueil !" : S.dores && S.dores[c] ? "Tu as déjà tout ici, timbre doré compris. Bien joué !"
+        : manque ? "Tu as déjà le timbre et la carte. Le doré ne se gagnait que le jour de la vidéo !" : `Bien joué ! Fais ${Math.round(max * .75)} points pour dorer le timbre.`)
+    : `Presque ! Il faut ${n - 1} bonnes réponses sur ${n} pour gagner le timbre et la carte postale. Réessaie !`;
   app.innerHTML = `
     <div class="marque"><span class="rune">ᚨ</span></div>
     <div class="fin"><p class="maj" style="text-align:center">${esc(P.etape.nom)}</p><h2>${P.score}</h2><p class="petit" style="text-align:center">sur ${max} points</p></div>
     <div class="heros" style="min-height:160px"><img src="${D.ansuz.salut}" alt="" style="width:120px"><div class="bulle" style="margin-bottom:70px">${esc(msg)}</div></div>
     ${gagnee ? `<div class="nouvelle"><span class="maj">Nouvelle carte postale !</span>${cartePostale(gagnee, "tourne")}<p class="aide">Touche la carte pour la retourner</p></div>` : ""}
     <div class="recap">${P.res.map((r, i) => `<div><span>${i + 1}. ${esc(r.titre || TYPES[r.type].nom)}</span><b>${r.pts} pts</b></div>`).join("")}</div>
-    <button class="btn" id="encore">Une autre étape</button>
+    <button class="btn" id="encore">Rattraper une autre étape</button>
     <button class="btn sec" id="maison">Retour au carnet</button>`;
   $("#encore").onclick = () => carnet(true); $("#maison").onclick = accueil;
   if (gagnee) { retournable(app); setTimeout(() => { const c = app.querySelector(".nouvelle .cp"); if (c) c.classList.remove("tourne"); }, 700); }
@@ -810,16 +819,18 @@ function passeport(){
       <div class="mid"><b>Mon passeport</b><div class="petit">${n} timbre${n > 1 ? "s" : ""}${nd ? ` dont ${nd} doré${nd > 1 ? "s" : ""}` : ""}${rates ? ` · ${rates} raté${rates > 1 ? "s" : ""}` : ""} · ${tous.length} départements</div></div></div>
     <section class="pass-couv"><span class="rune">ᚨ</span><span class="maj" style="color:var(--cuivre-clair)">République des voyageurs</span>
       <h2>PASSEPORT DU<br>TOUR DE FRANCE</h2><p>${esc(S.profil ? S.profil.pseudo : "Voyageur du carnet")}</p></section>
-    ${dit(n ? "Chaque timbre ne se gagne que le jour de ma vidéo, en jouant ce jour-là. Fais 7 500 points et il devient doré ! Un jour sans jouer, c'est un timbre raté pour toujours."
-      : "Ton passeport est vide ! Joue le jour de ma vidéo pour tamponner le timbre du département. À 7 500 points, il est doré !")}
+    ${dit(n ? "Chaque jour, joue l'étape du jour pour tamponner son timbre, doré à 7 500 points ! Les étapes passées se rattrapent avec leur quiz."
+      : `Ton passeport est vide ! Joue l'étape du jour, et rattrape les ${ETAPES.length - 1} étapes déjà passées avec leur quiz.`)}
     <div class="pass-page">${tous.map(d => {
       const st = etatTimbre(d.code), e = PAR_CODE[d.code] || {code:d.code, nom:d.nom};
       return st === "ok" ? timbre(e, S.timbres[d.code]) : timbre(e, null, st === "rate" ? "rate" : st === "avant" ? "avant" : "");
     }).join("")}</div>
-    <p class="petit" style="text-align:center;margin:0">Pointillés : étapes sorties avant ta première partie. Elles se rattrapent en cartes postales, pas en timbres.</p>
+    <p class="petit" style="text-align:center;margin:0">Touche un timbre vide pour rattraper l'étape avec son quiz. Les jours manqués se rattrapent aussi, mais sans le doré.</p>
     <div class="pied-actions"><button class="btn" id="partPass">Partager mon passeport ↗</button></div>`;
   $("#fermer").onclick = () => { const r = RETOUR; RETOUR = null; (r || accueil)(); };
   $("#partPass").onclick = partagerPasseport;
+  app.querySelectorAll(".pass-page .tb").forEach((t, i) => { const c = tous[i].code;
+    if (PAR_CODE[c] && !S.timbres[c] && etatTimbre(c) !== "jour") { t.style.cursor = "pointer"; t.onclick = () => carnet(true, PAR_CODE[c]); } });
 }
 async function partagerPasseport(){
   try { await document.fonts.ready; } catch (e) {}
@@ -1155,11 +1166,11 @@ function carnet(modeQuiz, ouvrir){
   stopChrono();
   const nbT = Object.keys(S.tampons).length;
   app.innerHTML = `<div class="barre"><button class="fermer" id="fermer" aria-label="Retour">‹</button>
-      <div class="mid"><b>${modeQuiz ? "Quiz par étape" : "Mon carnet de route"}</b><div class="petit">${ETAPES.length} départements visités · ${nbT} cartes postales</div></div></div>
-    <p class="petit" style="margin:0">${modeQuiz ? "Choisis un département. Réussis son quiz et Ansuz t'envoie sa carte postale." : "En bleu les étapes du tour, en cuivre celles dont tu as la carte postale. Touche un département."}</p>
+      <div class="mid"><b>${modeQuiz ? "Rattrape les étapes" : "Mon carnet de route"}</b><div class="petit">${ETAPES.length} départements visités · ${Object.keys(S.timbres).length} timbres · ${nbT} cartes postales</div></div></div>
+    <p class="petit" style="margin:0">${modeQuiz ? "Les étapes déjà passées se rattrapent ici : réussis leur quiz pour gagner le timbre et la carte postale. 75 % des points : timbre doré !" : "En bleu les étapes du tour, en cuivre celles dont tu as la carte postale. Touche un département."}</p>
     <div class="boite-carte">${svgCarte("jouable")}</div>
     <div id="fiche"></div>
-    <div class="liste">${ETAPES.slice().reverse().map(e => `<button data-code="${e.code}"><em>${e.etape}</em><span><b>${esc(e.nom)}</b><br><span class="petit">${esc(e.titre)}</span></span>${S.tampons[e.code] ? '<b class="t">ᚨ</b>' : ""}</button>`).join("")}</div>`;
+    <div class="liste">${ETAPES.slice().reverse().map(e => `<button data-code="${e.code}"><em>${e.etape}</em><span><b>${esc(e.nom)}</b><br><span class="petit">${esc(e.titre)}</span></span>${S.timbres[e.code] ? `<b class="t" style="${S.dores && S.dores[e.code] ? "color:#F6C434" : ""}">${S.dores && S.dores[e.code] ? "★" : "ᚨ"}</b>` : '<b class="t" style="opacity:.35">○</b>'}</button>`).join("")}</div>`;
   $("#fermer").onclick = accueil;
   const ouvre = code => {
     const e = PAR_CODE[code]; if (!e) return;
@@ -1169,7 +1180,8 @@ function carnet(modeQuiz, ouvrir){
       <div class="photo" style="transform:none;border-width:3px"><img src="${ph.img}" alt="${esc(ph.legende)}"></div>
       <p class="cred" style="text-align:left;margin:0">${esc(ph.credit)}</p>
       <span class="maj">Ce qu'Ansuz a appris</span><ul>${e.appris.map(a => `<li>${esc(a)}</li>`).join("")}</ul>
-      <button class="btn" id="qz">${S.tampons[code] ? "Rejouer le quiz" : "Gagner la carte postale"} (${e.q.length} questions) →</button></div>`;
+      ${timbre(e, S.timbres[code], "grand")}
+      <button class="btn" id="qz">${!S.timbres[code] ? "Gagner le timbre et la carte postale" : S.dores && S.dores[code] ? "Rejouer le quiz" : "Rejouer pour le timbre doré"} (${e.q.length} questions) →</button></div>`;
     $("#qz").onclick = () => partie(melange(Math.random, e.q).map(x => ({type:"quiz", etape:e, ...x, choix: melange(Math.random, [x.ok, ...x.ko])})), "etape", e);
     $("#fiche").scrollIntoView({behavior:"smooth", block:"start"});
   };
